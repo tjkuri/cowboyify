@@ -50,7 +50,7 @@ def mask_color(frame: np.ndarray, color: tuple[int, int, int], tol: int) -> np.n
 
 def find_idle_and_flash(frames: list[np.ndarray]) -> tuple[int, int]:
     """Returns (idle_idx, flash_idx). Uses only the right half (gun region)."""
-    h, w = frames[0].shape[:2]
+    _, w = frames[0].shape[:2]
     right = [f[:, w // 2:, :3].astype(np.int32) for f in frames]
     n = len(frames)
     dists = np.zeros((n, n))
