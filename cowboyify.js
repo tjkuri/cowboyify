@@ -1,6 +1,7 @@
 'use strict';
 
 const CANVAS_SIZE = 112;
+const FLASH_PERIOD_MS = 80;
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('preview');
@@ -15,6 +16,8 @@ let assets = null;
 let userImage = null;
 let hatXY = { x: 0, y: 0 };
 let gunXY = { x: 0, y: 0 };
+let flashOn = false;
+let lastFlashToggle = 0;
 
 async function loadImage(url) {
   const res = await fetch(url);
@@ -50,12 +53,21 @@ function drawContain(c, bm) {
   c.drawImage(bm, (CANVAS_SIZE - w) / 2, (CANVAS_SIZE - h) / 2, w, h);
 }
 
-function composeFrame(c, flashOn) {
+function composeFrame(c, fOn) {
   c.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   if (userImage) drawContain(c, userImage);
   if (!assets) return;
   c.drawImage(assets.hat, hatXY.x, hatXY.y);
-  c.drawImage(flashOn ? assets.gunFlash : assets.gunIdle, gunXY.x, gunXY.y);
+  c.drawImage(fOn ? assets.gunFlash : assets.gunIdle, gunXY.x, gunXY.y);
+}
+
+function tick(now) {
+  if (now - lastFlashToggle >= FLASH_PERIOD_MS) {
+    flashOn = !flashOn;
+    lastFlashToggle = now;
+  }
+  composeFrame(ctx, flashOn);
+  requestAnimationFrame(tick);
 }
 
 async function setInputFile(file) {
@@ -69,7 +81,6 @@ async function setInputFile(file) {
     gunXY = { x: 0, y: 0 };
     downloadBtn.disabled = false;
     statusEl.textContent = `Loaded ${file.name} (${userImage.width}×${userImage.height}).`;
-    composeFrame(ctx, false);
   } catch (err) {
     statusEl.textContent = `Couldn't decode that image: ${err.message}`;
     console.error(err);
@@ -101,7 +112,6 @@ function wireInputs() {
   resetBtn.addEventListener('click', () => {
     hatXY = { x: 0, y: 0 };
     gunXY = { x: 0, y: 0 };
-    composeFrame(ctx, false);
   });
 }
 
@@ -118,8 +128,8 @@ async function init() {
       gunBBox: await opaqueBBox(gunIdle),
     };
     wireInputs();
-    composeFrame(ctx, false);
     statusEl.textContent = 'Drop an image to begin.';
+    requestAnimationFrame(tick);
   } catch (err) {
     statusEl.textContent = `Failed to load assets: ${err.message}`;
     console.error(err);
