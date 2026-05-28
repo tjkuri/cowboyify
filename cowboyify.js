@@ -132,6 +132,7 @@ function wireInputs() {
     hatXY = { x: 0, y: 0 };
     gunXY = { x: 0, y: 0 };
   });
+  downloadBtn.addEventListener('click', exportGif);
 }
 
 function wireDrag() {
@@ -159,6 +160,56 @@ function wireDrag() {
   };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
+}
+
+function buildFrameCanvas(fOn) {
+  const off = document.createElement('canvas');
+  off.width = CANVAS_SIZE;
+  off.height = CANVAS_SIZE;
+  composeFrame(off.getContext('2d'), fOn);
+  return off;
+}
+
+function exportGif() {
+  if (!assets || !userImage) return;
+  downloadBtn.disabled = true;
+  statusEl.textContent = 'Encoding GIF…';
+
+  const gif = new GIF({
+    workers: 2,
+    quality: 10,
+    width: CANVAS_SIZE,
+    height: CANVAS_SIZE,
+    workerScript: 'vendor/gif.worker.js',
+    transparent: 0x000000,
+  });
+
+  gif.addFrame(buildFrameCanvas(false), { delay: 80, copy: true });
+  gif.addFrame(buildFrameCanvas(true), { delay: 80, copy: true });
+
+  gif.on('progress', (p) => {
+    statusEl.textContent = `Encoding GIF… ${Math.round(p * 100)}%`;
+  });
+  gif.on('finished', (blob) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'cowboyified.gif';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    statusEl.textContent = `Done — ${(blob.size / 1024).toFixed(1)} KB.`;
+    downloadBtn.disabled = false;
+  });
+
+  try {
+    gif.render();
+  } catch (err) {
+    statusEl.textContent = `Encoding failed: ${err.message}. Try opening the page from a local server (python3 -m http.server).`;
+    downloadBtn.disabled = false;
+    console.error(err);
+  }
 }
 
 async function init() {
