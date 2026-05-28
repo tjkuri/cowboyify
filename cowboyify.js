@@ -6,8 +6,15 @@ const $ = (id) => document.getElementById(id);
 const canvas = $('preview');
 const ctx = canvas.getContext('2d');
 const statusEl = $('status');
+const dropZone = $('drop-zone');
+const fileInput = $('file-input');
+const downloadBtn = $('download');
+const resetBtn = $('reset-positions');
 
 let assets = null;
+let userImage = null;
+let hatXY = { x: 0, y: 0 };
+let gunXY = { x: 0, y: 0 };
 
 async function loadImage(url) {
   const res = await fetch(url);
@@ -36,6 +43,68 @@ async function opaqueBBox(bitmap) {
   return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 }
 
+function drawContain(c, bm) {
+  const scale = Math.min(CANVAS_SIZE / bm.width, CANVAS_SIZE / bm.height);
+  const w = bm.width * scale;
+  const h = bm.height * scale;
+  c.drawImage(bm, (CANVAS_SIZE - w) / 2, (CANVAS_SIZE - h) / 2, w, h);
+}
+
+function composeFrame(c, flashOn) {
+  c.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  if (userImage) drawContain(c, userImage);
+  if (!assets) return;
+  c.drawImage(assets.hat, hatXY.x, hatXY.y);
+  c.drawImage(flashOn ? assets.gunFlash : assets.gunIdle, gunXY.x, gunXY.y);
+}
+
+async function setInputFile(file) {
+  if (!file || !file.type.startsWith('image/')) {
+    statusEl.textContent = "Couldn't read that file — try a PNG, JPG, or GIF.";
+    return;
+  }
+  try {
+    userImage = await createImageBitmap(file);
+    hatXY = { x: 0, y: 0 };
+    gunXY = { x: 0, y: 0 };
+    downloadBtn.disabled = false;
+    statusEl.textContent = `Loaded ${file.name} (${userImage.width}×${userImage.height}).`;
+    composeFrame(ctx, false);
+  } catch (err) {
+    statusEl.textContent = `Couldn't decode that image: ${err.message}`;
+    console.error(err);
+  }
+}
+
+function wireInputs() {
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (f) setInputFile(f);
+  });
+  ['dragenter', 'dragover'].forEach((ev) => {
+    dropZone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropZone.classList.add('hover');
+    });
+  });
+  ['dragleave', 'drop'].forEach((ev) => {
+    dropZone.addEventListener(ev, (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('hover');
+    });
+  });
+  dropZone.addEventListener('drop', (e) => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f) setInputFile(f);
+  });
+  resetBtn.addEventListener('click', () => {
+    hatXY = { x: 0, y: 0 };
+    gunXY = { x: 0, y: 0 };
+    composeFrame(ctx, false);
+  });
+}
+
 async function init() {
   try {
     const [hat, gunIdle, gunFlash] = await Promise.all([
@@ -48,18 +117,13 @@ async function init() {
       hatBBox: await opaqueBBox(hat),
       gunBBox: await opaqueBBox(gunIdle),
     };
-    drawPlaceholder();
+    wireInputs();
+    composeFrame(ctx, false);
     statusEl.textContent = 'Drop an image to begin.';
   } catch (err) {
     statusEl.textContent = `Failed to load assets: ${err.message}`;
     console.error(err);
   }
-}
-
-function drawPlaceholder() {
-  ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
-  ctx.drawImage(assets.hat, 0, 0);
-  ctx.drawImage(assets.gunIdle, 0, 0);
 }
 
 init();
