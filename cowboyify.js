@@ -18,6 +18,7 @@ let hatXY = { x: 0, y: 0 };
 let gunXY = { x: 0, y: 0 };
 let flashOn = false;
 let lastFlashToggle = 0;
+let dragging = null;   // { kind: 'hat'|'gun', dx, dy }  or null
 
 async function loadImage(url) {
   const res = await fetch(url);
@@ -44,6 +45,24 @@ async function opaqueBBox(bitmap) {
   }
   if (maxX < 0) return { x: 0, y: 0, w: bitmap.width, h: bitmap.height };
   return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+function canvasPointFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvas.width / rect.width;
+  const sy = canvas.height / rect.height;
+  return { x: (e.clientX - rect.left) * sx, y: (e.clientY - rect.top) * sy };
+}
+
+function hitTest(p) {
+  if (!assets) return null;
+  const inBox = (xy, bb) =>
+    p.x >= xy.x + bb.x && p.x < xy.x + bb.x + bb.w &&
+    p.y >= xy.y + bb.y && p.y < xy.y + bb.y + bb.h;
+  // Gun is topmost in z-order in composeFrame, so test it first.
+  if (inBox(gunXY, assets.gunBBox)) return 'gun';
+  if (inBox(hatXY, assets.hatBBox)) return 'hat';
+  return null;
 }
 
 function drawContain(c, bm) {
@@ -115,6 +134,33 @@ function wireInputs() {
   });
 }
 
+function wireDrag() {
+  canvas.addEventListener('pointerdown', (e) => {
+    const p = canvasPointFromEvent(e);
+    const kind = hitTest(p);
+    if (!kind) return;
+    const xy = kind === 'gun' ? gunXY : hatXY;
+    dragging = { kind, dx: p.x - xy.x, dy: p.y - xy.y };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.classList.add('dragging');
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const p = canvasPointFromEvent(e);
+    const xy = dragging.kind === 'gun' ? gunXY : hatXY;
+    xy.x = Math.round(p.x - dragging.dx);
+    xy.y = Math.round(p.y - dragging.dy);
+  });
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = null;
+    canvas.releasePointerCapture(e.pointerId);
+    canvas.classList.remove('dragging');
+  };
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+}
+
 async function init() {
   try {
     const [hat, gunIdle, gunFlash] = await Promise.all([
@@ -128,6 +174,7 @@ async function init() {
       gunBBox: await opaqueBBox(gunIdle),
     };
     wireInputs();
+    wireDrag();
     statusEl.textContent = 'Drop an image to begin.';
     requestAnimationFrame(tick);
   } catch (err) {
