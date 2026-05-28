@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>cowboyify-emoji</title>
+  <style>
+    :root { color-scheme: dark light; font-family: system-ui, sans-serif; }
+    body {
+      margin: 0; padding: 32px;
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+      background: #1c1c1c; color: #eee;
+    }
+    h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    #drop-zone {
+      width: 320px; padding: 24px;
+      border: 2px dashed #666; border-radius: 8px;
+      text-align: center; color: #aaa; cursor: pointer;
+      transition: border-color 120ms, color 120ms;
+    }
+    #drop-zone.hover { border-color: #6bd; color: #cde; }
+    #preview {
+      width: 224px; height: 224px;          /* render at 2× CSS size */
+      image-rendering: pixelated;
+      background:
+        linear-gradient(45deg, #2a2a2a 25%, transparent 25%, transparent 75%, #2a2a2a 75%) 0 0 / 16px 16px,
+        linear-gradient(45deg, #2a2a2a 25%, transparent 25%, transparent 75%, #2a2a2a 75%) 8px 8px / 16px 16px,
+        #222;
+      cursor: grab;
+    }
+    #preview.dragging { cursor: grabbing; }
+    .row { display: flex; gap: 8px; }
+    button {
+      padding: 8px 14px; border: 1px solid #555; border-radius: 6px;
+      background: #2c2c2c; color: #eee; cursor: pointer; font: inherit;
+    }
+    button:disabled { opacity: 0.5; cursor: default; }
+    button.primary { background: #2b6cb0; border-color: #2b6cb0; }
+    #status { min-height: 1.4em; color: #aaa; font-size: 13px; }
+    input[type=file] { display: none; }
+  </style>
+</head>
+<body>
+  <h1>cowboyify-emoji</h1>
+  <div id="drop-zone">Drop an image here, or click to pick a file</div>
+  <input id="file-input" type="file" accept="image/*">
+  <canvas id="preview" width="112" height="112"></canvas>
+  <div class="row">
+    <button id="reset-positions" type="button">Reset positions</button>
+    <button id="download" class="primary" type="button" disabled>Download .gif</button>
+  </div>
+  <div id="status">Drop an image to begin.</div>
+
+  <script src="vendor/gif.js"></script>
+  <script src="cowboyify.js"></script>
+</body>
+</html>
