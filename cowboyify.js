@@ -1,7 +1,8 @@
 'use strict';
 
 const CANVAS_SIZE = 112;
-const FLASH_PERIOD_MS = 80;
+const FLASH_ON_MS = 160;   // 2 frames @ 80ms
+const FLASH_OFF_MS = 160;  // 2 frames @ 80ms
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('preview');
@@ -102,7 +103,8 @@ function composeFrame(c, fOn) {
 }
 
 function tick(now) {
-  if (now - lastFlashToggle >= FLASH_PERIOD_MS) {
+  const dwell = flashOn ? FLASH_ON_MS : FLASH_OFF_MS;
+  if (now - lastFlashToggle >= dwell) {
     flashOn = !flashOn;
     lastFlashToggle = now;
   }
@@ -208,8 +210,8 @@ function exportGif() {
     transparent: 0x000000,
   });
 
-  gif.addFrame(buildFrameCanvas(false), { delay: 80, copy: true });
-  gif.addFrame(buildFrameCanvas(true), { delay: 80, copy: true });
+  gif.addFrame(buildFrameCanvas(false), { delay: FLASH_OFF_MS, copy: true });
+  gif.addFrame(buildFrameCanvas(true),  { delay: FLASH_ON_MS,  copy: true });
 
   gif.on('progress', (p) => {
     statusEl.textContent = `Encoding GIF… ${Math.round(p * 100)}%`;
