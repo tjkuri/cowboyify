@@ -11,6 +11,7 @@ const dropZone = $('drop-zone');
 const fileInput = $('file-input');
 const downloadBtn = $('download');
 const resetBtn = $('reset-positions');
+const flipBtn = $('flip-assets');
 
 let assets = null;
 let userImage = null;
@@ -19,12 +20,26 @@ let gunXY = { x: 0, y: 0 };
 let flashOn = false;
 let lastFlashToggle = 0;
 let dragging = null;   // { kind: 'hat'|'gun', dx, dy }  or null
+let facing = 'right';  // 'right' | 'left'
 
 async function loadImage(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status}`);
   const blob = await res.blob();
   return await createImageBitmap(blob);
+}
+
+function flipCanvas(bm) {
+  const off = new OffscreenCanvas(bm.width, bm.height);
+  const c = off.getContext('2d');
+  c.translate(bm.width, 0);
+  c.scale(-1, 1);
+  c.drawImage(bm, 0, 0);
+  return off;
+}
+
+function reflectBBox(bb) {
+  return { x: CANVAS_SIZE - bb.x - bb.w, y: bb.y, w: bb.w, h: bb.h };
 }
 
 async function opaqueBBox(bitmap) {
@@ -59,9 +74,11 @@ function hitTest(p) {
   const inBox = (xy, bb) =>
     p.x >= xy.x + bb.x && p.x < xy.x + bb.x + bb.w &&
     p.y >= xy.y + bb.y && p.y < xy.y + bb.y + bb.h;
+  const hatBB = facing === 'left' ? assets.hatBBoxFlipped : assets.hatBBox;
+  const gunBB = facing === 'left' ? assets.gunBBoxFlipped : assets.gunBBox;
   // Gun is topmost in z-order in composeFrame, so test it first.
-  if (inBox(gunXY, assets.gunBBox)) return 'gun';
-  if (inBox(hatXY, assets.hatBBox)) return 'hat';
+  if (inBox(gunXY, gunBB)) return 'gun';
+  if (inBox(hatXY, hatBB)) return 'hat';
   return null;
 }
 
@@ -76,8 +93,12 @@ function composeFrame(c, fOn) {
   c.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   if (userImage) drawContain(c, userImage);
   if (!assets) return;
-  c.drawImage(assets.hat, hatXY.x, hatXY.y);
-  c.drawImage(fOn ? assets.gunFlash : assets.gunIdle, gunXY.x, gunXY.y);
+  const hatImg = facing === 'left' ? assets.hatFlipped : assets.hat;
+  const gunImg = facing === 'left'
+    ? (fOn ? assets.gunFlashFlipped : assets.gunIdleFlipped)
+    : (fOn ? assets.gunFlash : assets.gunIdle);
+  c.drawImage(hatImg, hatXY.x, hatXY.y);
+  c.drawImage(gunImg, gunXY.x, gunXY.y);
 }
 
 function tick(now) {
@@ -131,6 +152,9 @@ function wireInputs() {
   resetBtn.addEventListener('click', () => {
     hatXY = { x: 0, y: 0 };
     gunXY = { x: 0, y: 0 };
+  });
+  flipBtn.addEventListener('click', () => {
+    facing = facing === 'right' ? 'left' : 'right';
   });
   downloadBtn.addEventListener('click', exportGif);
 }
@@ -221,9 +245,14 @@ async function init() {
     ]);
     assets = {
       hat, gunIdle, gunFlash,
+      hatFlipped: flipCanvas(hat),
+      gunIdleFlipped: flipCanvas(gunIdle),
+      gunFlashFlipped: flipCanvas(gunFlash),
       hatBBox: await opaqueBBox(hat),
       gunBBox: await opaqueBBox(gunIdle),
     };
+    assets.hatBBoxFlipped = reflectBBox(assets.hatBBox);
+    assets.gunBBoxFlipped = reflectBBox(assets.gunBBox);
     wireInputs();
     wireDrag();
     statusEl.textContent = 'Drop an image to begin.';
