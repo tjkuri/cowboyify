@@ -13,11 +13,15 @@ const fileInput = $('file-input');
 const downloadBtn = $('download');
 const resetBtn = $('reset-positions');
 const flipBtn = $('flip-assets');
+const hatScaleInput = $('hat-scale');
+const gunScaleInput = $('gun-scale');
 
 let assets = null;
 let userImage = null;
 let hatXY = { x: 0, y: 0 };
 let gunXY = { x: 0, y: 0 };
+let hatScale = 1;
+let gunScale = 1;
 let flashOn = false;
 let lastFlashToggle = 0;
 let dragging = null;   // { kind: 'hat'|'gun', dx, dy }  or null
@@ -41,6 +45,26 @@ function flipCanvas(bm) {
 
 function reflectBBox(bb) {
   return { x: CANVAS_SIZE - bb.x - bb.w, y: bb.y, w: bb.w, h: bb.h };
+}
+
+// Asset is scaled around its bbox center, so its visual position stays put.
+function scaledBBoxInCanvas(xy, bb, scale) {
+  const cx = bb.x + bb.w / 2;
+  const cy = bb.y + bb.h / 2;
+  return {
+    x: xy.x + cx - bb.w * scale / 2,
+    y: xy.y + cy - bb.h * scale / 2,
+    w: bb.w * scale,
+    h: bb.h * scale,
+  };
+}
+
+function drawScaledAsset(c, img, xy, bb, scale) {
+  const cx = bb.x + bb.w / 2;
+  const cy = bb.y + bb.h / 2;
+  const drawX = xy.x + cx - cx * scale;
+  const drawY = xy.y + cy - cy * scale;
+  c.drawImage(img, drawX, drawY, CANVAS_SIZE * scale, CANVAS_SIZE * scale);
 }
 
 async function opaqueBBox(bitmap) {
@@ -72,14 +96,13 @@ function canvasPointFromEvent(e) {
 
 function hitTest(p) {
   if (!assets) return null;
-  const inBox = (xy, bb) =>
-    p.x >= xy.x + bb.x && p.x < xy.x + bb.x + bb.w &&
-    p.y >= xy.y + bb.y && p.y < xy.y + bb.y + bb.h;
+  const inRect = (r) =>
+    p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
   const hatBB = facing === 'left' ? assets.hatBBoxFlipped : assets.hatBBox;
   const gunBB = facing === 'left' ? assets.gunBBoxFlipped : assets.gunBBox;
   // Gun is topmost in z-order in composeFrame, so test it first.
-  if (inBox(gunXY, gunBB)) return 'gun';
-  if (inBox(hatXY, hatBB)) return 'hat';
+  if (inRect(scaledBBoxInCanvas(gunXY, gunBB, gunScale))) return 'gun';
+  if (inRect(scaledBBoxInCanvas(hatXY, hatBB, hatScale))) return 'hat';
   return null;
 }
 
@@ -98,8 +121,10 @@ function composeFrame(c, fOn) {
   const gunImg = facing === 'left'
     ? (fOn ? assets.gunFlashFlipped : assets.gunIdleFlipped)
     : (fOn ? assets.gunFlash : assets.gunIdle);
-  c.drawImage(hatImg, hatXY.x, hatXY.y);
-  c.drawImage(gunImg, gunXY.x, gunXY.y);
+  const hatBB = facing === 'left' ? assets.hatBBoxFlipped : assets.hatBBox;
+  const gunBB = facing === 'left' ? assets.gunBBoxFlipped : assets.gunBBox;
+  drawScaledAsset(c, hatImg, hatXY, hatBB, hatScale);
+  drawScaledAsset(c, gunImg, gunXY, gunBB, gunScale);
 }
 
 function tick(now) {
@@ -154,9 +179,19 @@ function wireInputs() {
   resetBtn.addEventListener('click', () => {
     hatXY = { x: 0, y: 0 };
     gunXY = { x: 0, y: 0 };
+    hatScale = 1;
+    gunScale = 1;
+    hatScaleInput.value = '1';
+    gunScaleInput.value = '1';
   });
   flipBtn.addEventListener('click', () => {
     facing = facing === 'right' ? 'left' : 'right';
+  });
+  hatScaleInput.addEventListener('input', (e) => {
+    hatScale = parseFloat(e.target.value);
+  });
+  gunScaleInput.addEventListener('input', (e) => {
+    gunScale = parseFloat(e.target.value);
   });
   downloadBtn.addEventListener('click', exportGif);
 }

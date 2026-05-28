@@ -28,7 +28,10 @@
       cursor: grab;
     }
     #preview.dragging { cursor: grabbing; }
-    .row { display: flex; gap: 8px; }
+    .row { display: flex; gap: 8px; align-items: center; }
+    .sliders { gap: 16px; }
+    .sliders label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #ccc; }
+    .sliders input[type=range] { width: 110px; }
     button {
       padding: 8px 14px; border: 1px solid #555; border-radius: 6px;
       background: #2c2c2c; color: #eee; cursor: pointer; font: inherit;
@@ -48,6 +51,10 @@
     <button id="reset-positions" type="button">Reset positions</button>
     <button id="flip-assets" type="button">Flip ⇄</button>
     <button id="download" class="primary" type="button" disabled>Download .gif</button>
+  </div>
+  <div class="row sliders">
+    <label>Hat <input id="hat-scale" type="range" min="0.5" max="1.8" step="0.05" value="1"></label>
+    <label>Gun <input id="gun-scale" type="range" min="0.5" max="1.8" step="0.05" value="1"></label>
   </div>
   <div id="status">Drop an image to begin.</div>
 
