@@ -15,17 +15,20 @@ const resetBtn = $('reset-positions');
 const flipBtn = $('flip-assets');
 const hatScaleInput = $('hat-scale');
 const gunScaleInput = $('gun-scale');
+const akimboBtn = $('akimbo-toggle');
 
 let assets = null;
 let userImage = null;
 let hatXY = { x: 0, y: 0 };
 let gunXY = { x: 0, y: 0 };
+let gun2XY = { x: 0, y: 0 };
 let hatScale = 1;
 let gunScale = 1;
 let flashOn = false;
 let lastFlashToggle = 0;
-let dragging = null;   // { kind: 'hat'|'gun', dx, dy }  or null
+let dragging = null;   // { kind: 'hat'|'gun'|'gun2', dx, dy }  or null
 let facing = 'right';  // 'right' | 'left'
+let akimbo = false;
 
 async function loadImage(url) {
   const res = await fetch(url);
@@ -45,6 +48,27 @@ function flipCanvas(bm) {
 
 function reflectBBox(bb) {
   return { x: CANVAS_SIZE - bb.x - bb.w, y: bb.y, w: bb.w, h: bb.h };
+}
+
+// Mirror a position to the opposite side of the canvas. The flipped full-canvas
+// sprite already lands on the other side, so {0,0} reflects to {0,0}.
+function reflectPoint(xy) {
+  return { x: -xy.x, y: xy.y };
+}
+
+// Pick the idle/flash gun sprite for the given orientation.
+function gunImageFor(flip, flash) {
+  if (flip) return flash ? assets.gunFlashFlipped : assets.gunIdleFlipped;
+  return flash ? assets.gunFlash : assets.gunIdle;
+}
+
+function gunBBoxFor(flip) {
+  return flip ? assets.gunBBoxFlipped : assets.gunBBox;
+}
+
+// Live position object for a draggable kind (read at call time — gun2XY is reassigned on toggle).
+function posFor(kind) {
+  return kind === 'gun2' ? gun2XY : kind === 'gun' ? gunXY : hatXY;
 }
 
 // Asset is scaled around its bbox center, so its visual position stays put.
@@ -98,10 +122,11 @@ function hitTest(p) {
   if (!assets) return null;
   const inRect = (r) =>
     p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h;
-  const hatBB = facing === 'left' ? assets.hatBBoxFlipped : assets.hatBBox;
-  const gunBB = facing === 'left' ? assets.gunBBoxFlipped : assets.gunBBox;
-  // Gun is topmost in z-order in composeFrame, so test it first.
-  if (inRect(scaledBBoxInCanvas(gunXY, gunBB, gunScale))) return 'gun';
+  const gun1Flip = facing === 'left';
+  const hatBB = gun1Flip ? assets.hatBBoxFlipped : assets.hatBBox;
+  // Topmost first: gun2 (akimbo) → gun1 → hat.
+  if (akimbo && inRect(scaledBBoxInCanvas(gun2XY, gunBBoxFor(!gun1Flip), gunScale))) return 'gun2';
+  if (inRect(scaledBBoxInCanvas(gunXY, gunBBoxFor(gun1Flip), gunScale))) return 'gun';
   if (inRect(scaledBBoxInCanvas(hatXY, hatBB, hatScale))) return 'hat';
   return null;
 }
@@ -117,14 +142,20 @@ function composeFrame(c, fOn) {
   c.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
   if (userImage) drawContain(c, userImage);
   if (!assets) return;
-  const hatImg = facing === 'left' ? assets.hatFlipped : assets.hat;
-  const gunImg = facing === 'left'
-    ? (fOn ? assets.gunFlashFlipped : assets.gunIdleFlipped)
-    : (fOn ? assets.gunFlash : assets.gunIdle);
-  const hatBB = facing === 'left' ? assets.hatBBoxFlipped : assets.hatBBox;
-  const gunBB = facing === 'left' ? assets.gunBBoxFlipped : assets.gunBBox;
+  const gun1Flip = facing === 'left';
+  const hatImg = gun1Flip ? assets.hatFlipped : assets.hat;
+  const hatBB = gun1Flip ? assets.hatBBoxFlipped : assets.hatBBox;
   drawScaledAsset(c, hatImg, hatXY, hatBB, hatScale);
-  drawScaledAsset(c, gunImg, gunXY, gunBB, gunScale);
+
+  // Single-gun mode: flash follows fOn. Akimbo: gun1 fires on phase A (!fOn),
+  // gun2 on phase B (fOn), so exactly one gun flashes per frame.
+  const gun1Flash = akimbo ? !fOn : fOn;
+  drawScaledAsset(c, gunImageFor(gun1Flip, gun1Flash), gunXY, gunBBoxFor(gun1Flip), gunScale);
+
+  if (akimbo) {
+    const gun2Flip = !gun1Flip;
+    drawScaledAsset(c, gunImageFor(gun2Flip, fOn), gun2XY, gunBBoxFor(gun2Flip), gunScale);
+  }
 }
 
 function tick(now) {
@@ -179,6 +210,7 @@ function wireInputs() {
   resetBtn.addEventListener('click', () => {
     hatXY = { x: 0, y: 0 };
     gunXY = { x: 0, y: 0 };
+    gun2XY = { x: 0, y: 0 };
     hatScale = 1;
     gunScale = 1;
     hatScaleInput.value = '1';
@@ -186,6 +218,11 @@ function wireInputs() {
   });
   flipBtn.addEventListener('click', () => {
     facing = facing === 'right' ? 'left' : 'right';
+  });
+  akimboBtn.addEventListener('click', () => {
+    akimbo = !akimbo;
+    akimboBtn.classList.toggle('active', akimbo);
+    if (akimbo) gun2XY = reflectPoint(gunXY);   // default: mirror of gun 1
   });
   hatScaleInput.addEventListener('input', (e) => {
     hatScale = parseFloat(e.target.value);
@@ -201,7 +238,7 @@ function wireDrag() {
     const p = canvasPointFromEvent(e);
     const kind = hitTest(p);
     if (!kind) return;
-    const xy = kind === 'gun' ? gunXY : hatXY;
+    const xy = posFor(kind);
     dragging = { kind, dx: p.x - xy.x, dy: p.y - xy.y };
     canvas.setPointerCapture(e.pointerId);
     canvas.classList.add('dragging');
@@ -209,7 +246,7 @@ function wireDrag() {
   canvas.addEventListener('pointermove', (e) => {
     if (!dragging) return;
     const p = canvasPointFromEvent(e);
-    const xy = dragging.kind === 'gun' ? gunXY : hatXY;
+    const xy = posFor(dragging.kind);
     xy.x = Math.round(p.x - dragging.dx);
     xy.y = Math.round(p.y - dragging.dy);
   });
